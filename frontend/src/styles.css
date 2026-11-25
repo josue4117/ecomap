@@ -100,9 +100,10 @@ td { overflow-wrap: anywhere; }
   .filters > :first-child, .filters > .actions { grid-column: 1 / -1; }
   .filters:not(.filters-open) { display: none; }
   .filter-toggle { display: inline-block; }
-  .map-panel { gap: .65rem; }
+  .map-panel { gap: .65rem; padding-inline: .5rem; }
   .map-actions { justify-content: space-between; }
   .leaflet-container { height: clamp(360px, 66svh, 660px); }
+  .leaflet-popup-content { max-width: calc(100vw - 6rem); }
   .zone-form > label { flex: 1 1 100%; }
   .table-scroll table { min-width: 680px; }
   .account span { display: none; }
