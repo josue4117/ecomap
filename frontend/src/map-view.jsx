@@ -1,0 +1,208 @@
+import { useEffect, useState } from "react";
+import { CircleMarker, MapContainer, Polygon, Polyline, Popup, TileLayer, useMapEvents } from "react-leaflet";
+
+const center = [21.8853, -102.2916];
+const states = ["Activo", "Temporalmente cerrado"];
+const emptyFilters = { search: "", category: "", status: "" };
+const toLatLng = ([longitude, latitude]) => [latitude, longitude];
+
+function MapClicks({ onClick }) {
+  useMapEvents({ click: ({ latlng }) => onClick([latlng.lng, latlng.lat]) });
+  return null;
+}
+
+function CategoryOptions({ categories }) {
+  return categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>);
+}
+
+function StateOptions() {
+  return states.map((status) => <option key={status}>{status}</option>);
+}
+
+function PointForm({ record, coordinates, categories, busy, onSave, onCancel }) {
+  return <form onSubmit={(event) => {
+    event.preventDefault();
+    const fields = Object.fromEntries(new FormData(event.currentTarget));
+    onSave({ ...fields, geometry: { type: "Point", coordinates } });
+  }}>
+    <label>Nombre<input name="name" required maxLength={100} defaultValue={record?.name} /></label>
+    <label>Descripción<textarea name="description" required maxLength={500} defaultValue={record?.description} /></label>
+    <label>Categoría<select name="category" required defaultValue={record?.category?._id || ""}>
+      <option value="">Selecciona una categoría</option><CategoryOptions categories={categories} />
+    </select></label>
+    {!categories.length && <span>Crea una categoría desde Catálogos para guardar el punto.</span>}
+    <label>Estado<select name="status" defaultValue={record?.status}><StateOptions /></select></label>
+    <div className="actions"><button disabled={busy || !categories.length}>Guardar</button>
+      <button type="button" className="secondary" disabled={busy} onClick={onCancel}>Cancelar</button></div>
+  </form>;
+}
+
+function PointMarker({ record, categories, busy, change }) {
+  const [editing, setEditing] = useState(false);
+  return <CircleMarker center={toLatLng(record.geometry.coordinates)} radius={9}
+    pathOptions={{ color: "#fff", weight: 2, fillColor: record.status === states[0] ? "#086652" : "#a65f19", fillOpacity: 1 }}>
+    <Popup minWidth={245}>
+      {editing ? <PointForm record={record} coordinates={record.geometry.coordinates} categories={categories} busy={busy}
+        onCancel={() => setEditing(false)} onSave={async (body) => {
+          if (await change("locations", "PUT", record._id, body)) setEditing(false);
+        }} /> : <>
+        <strong>{record.name}</strong>
+        <p>{record.description}</p>
+        <p>{record.category?.name || "Sin categoría"} · {record.status}</p>
+        <div className="actions">
+          <button type="button" className="secondary" onClick={() => setEditing(true)}>Editar</button>
+          <button type="button" className="danger" disabled={busy} onClick={() => {
+            if (window.confirm("¿Eliminar " + record.name + "?")) change("locations", "DELETE", record._id);
+          }}>Eliminar</button>
+        </div>
+      </>}
+    </Popup>
+  </CircleMarker>;
+}
+
+export default function MapView({ api, notify }) {
+  const [categories, setCategories] = useState([]);
+  const [locations, setLocations] = useState(null);
+  const [zones, setZones] = useState([]);
+  const [filters, setFilters] = useState(emptyFilters);
+  const [revision, setRevision] = useState(0);
+  const [mode, setMode] = useState("browse");
+  const [draft, setDraft] = useState(null);
+  const [vertices, setVertices] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [locationError, setLocationError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api("/categories", { signal: controller.signal }).then(({ data }) => setCategories(data)).catch((error) => {
+      if (error.name !== "AbortError") notify({ text: error.message, error: true });
+    });
+    return () => controller.abort();
+  }, [api, notify]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api("/zones", { signal: controller.signal }).then(({ data }) => setZones(data)).catch((error) => {
+      if (error.name !== "AbortError") notify({ text: error.message, error: true });
+    });
+    return () => controller.abort();
+  }, [api, notify]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString();
+    api("/locations?" + query, { signal: controller.signal }).then(({ data }) => {
+      setLocations(data);
+      setLocationError("");
+    }).catch((error) => {
+      if (error.name !== "AbortError") setLocationError(error.message);
+    });
+    return () => controller.abort();
+  }, [api, filters, revision]);
+
+  async function change(resource, method, id, body) {
+    setBusy(true);
+    notify(null);
+    try {
+      const result = await api("/" + resource + (id ? "/" + id : ""), { method, body });
+      if (resource === "locations") {
+        setRevision((value) => value + 1);
+      } else {
+        setZones((records) => method === "DELETE" ? records.filter((record) => record._id !== id) : [...records, result.data]);
+      }
+      notify({ text: result.message });
+      return true;
+    } catch (error) {
+      notify({ text: error.message, error: true });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function selectMode(nextMode) {
+    setMode(nextMode);
+    setDraft(null);
+    setVertices([]);
+  }
+
+  function onMapClick(coordinates) {
+    if (busy) return;
+    if (mode === "point") setDraft(coordinates);
+    if (mode === "zone" && vertices.length < 200) setVertices((current) => [...current, coordinates]);
+  }
+
+  async function saveZone(event) {
+    event.preventDefault();
+    const name = new FormData(event.currentTarget).get("name");
+    const geometry = { type: "Polygon", coordinates: [[...vertices, vertices[0]]] };
+    if (await change("zones", "POST", null, { name, geometry })) selectMode("browse");
+  }
+
+  return <>
+    <div className="heading">
+      <div><h1>Mapa de reciclaje</h1><p>Consulta los centros de acopio y sus zonas de cobertura.</p></div>
+      <div className="actions">
+        <button disabled={busy} aria-pressed={mode === "point"} className={mode === "point" ? "active-tool" : ""} onClick={() => selectMode("point")}>Nuevo punto</button>
+        <button disabled={busy} aria-pressed={mode === "zone"} className={mode === "zone" ? "active-tool" : "secondary"} onClick={() => selectMode("zone")}>Dibujar zona</button>
+      </div>
+    </div>
+    <section className="panel map-panel" aria-label="Mapa y filtros">
+      <form className="filters" onSubmit={(event) => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(event.currentTarget));
+        setFilters({ ...values, search: values.search.trim() });
+      }} onReset={() => setFilters(emptyFilters)}>
+        <label>Buscar por nombre<input name="search" type="search" maxLength={100} placeholder="Nombre de la ubicación" /></label>
+        <label>Categoría<select name="category"><option value="">Todas</option><CategoryOptions categories={categories} /></select></label>
+        <label>Estado<select name="status"><option value="">Todos</option><StateOptions /></select></label>
+        <div className="actions"><button>Aplicar</button><button className="secondary" type="reset">Limpiar</button></div>
+      </form>
+      {mode !== "browse" && <div className="map-tools">
+        <p>{mode === "point" ? "Haz clic en el mapa para elegir la ubicación." : "Haz clic en el mapa para marcar los vértices. Añade al menos tres."}</p>
+        {mode === "zone" && <form className="zone-form" onSubmit={saveZone}>
+          <label>Nombre de la zona<input name="name" required maxLength={100} /></label>
+          <span>{vertices.length} vértices</span>
+          <button disabled={busy || vertices.length < 3}>Guardar zona</button>
+          <button type="button" className="secondary" disabled={busy || !vertices.length} onClick={() => setVertices(vertices.slice(0, -1))}>Quitar último</button>
+        </form>}
+        <button disabled={busy} type="button" className="secondary" onClick={() => selectMode("browse")}>Cancelar</button>
+      </div>}
+      <MapContainer center={center} zoom={13} scrollWheelZoom={false} closePopupOnClick={false}>
+        <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' maxZoom={19} />
+        <MapClicks onClick={onMapClick} />
+        {zones.map((zone) => <Polygon key={zone._id} positions={zone.geometry.coordinates[0].map(toLatLng)}
+          interactive={mode === "browse"} pathOptions={{ color: "#2c8275" }}>
+          <Popup><strong>{zone.name}</strong><p>Zona de cobertura</p>
+            <button type="button" className="danger" disabled={busy} onClick={() => {
+              if (window.confirm("¿Eliminar la zona " + zone.name + "?")) change("zones", "DELETE", zone._id);
+            }}>Eliminar zona</button>
+          </Popup>
+        </Polygon>)}
+        {locations?.map((record) => <PointMarker key={record._id} record={record} categories={categories} busy={busy} change={change} />)}
+        {vertices.length >= 3 ? <Polygon positions={vertices.map(toLatLng)} interactive={false} pathOptions={{ dashArray: "6 5" }} /> :
+          <Polyline positions={vertices.map(toLatLng)} interactive={false} />}
+        {vertices.map((vertex, index) => <CircleMarker key={index} center={toLatLng(vertex)} radius={4} interactive={false} />)}
+        {draft && <Popup key={draft.join(",")} position={toLatLng(draft)} minWidth={245}>
+          <strong>Nueva ubicación</strong>
+          <PointForm coordinates={draft} categories={categories} busy={busy} onCancel={() => selectMode("browse")}
+            onSave={async (body) => { if (await change("locations", "POST", null, body)) selectMode("browse"); }} />
+        </Popup>}
+      </MapContainer>
+    </section>
+    <section className="panel table-panel">
+      <div className="table-heading"><h2>Ubicaciones registradas</h2>{locations && <span>{locations.length} {locations.length === 1 ? "registro" : "registros"}</span>}</div>
+      {locationError && <p className="feedback error" role="alert">{locationError}</p>}
+      {!locations && !locationError && <p role="status">Cargando ubicaciones…</p>}
+      {locations?.length === 0 && <p className="muted">No hay ubicaciones para mostrar.</p>}
+      {!!locations?.length && <div className="table-scroll"><table>
+        <thead><tr>{["Nombre", "Descripción", "Categoría", "Estado", "Longitud", "Latitud", "Creación", "Última edición"].map((title) => <th key={title} scope="col">{title}</th>)}</tr></thead>
+        <tbody>{locations.map((record) => <tr key={record._id}>
+          <th scope="row">{record.name}</th><td>{record.description}</td><td>{record.category?.name || "Sin categoría"}</td><td>{record.status}</td>
+          <td>{record.geometry.coordinates[0]}</td><td>{record.geometry.coordinates[1]}</td>
+          <td>{new Date(record.createdAt).toLocaleString("es-MX")}</td><td>{new Date(record.updatedAt).toLocaleString("es-MX")}</td>
+        </tr>)}</tbody>
+      </table></div>}
+    </section>
+  </>;
+}
