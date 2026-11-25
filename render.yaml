@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ecomapa-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        fromService:
+          name: ecomapa
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: web
+    name: ecomapa
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && VITE_API_URL="$API_PUBLIC_URL/api" npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: API_PUBLIC_URL
+        fromService:
+          name: ecomapa-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
