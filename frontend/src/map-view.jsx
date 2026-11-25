@@ -23,7 +23,8 @@ function PointForm({ record, coordinates, categories, busy, onSave, onCancel }) 
   return <form onSubmit={(event) => {
     event.preventDefault();
     const fields = Object.fromEntries(new FormData(event.currentTarget));
-    onSave({ ...fields, geometry: { type: "Point", coordinates } });
+    const { longitude, latitude, ...details } = fields;
+    onSave({ ...details, geometry: { type: "Point", coordinates: record ? [Number(longitude), Number(latitude)] : coordinates } });
   }}>
     <label>Nombre<input name="name" required maxLength={100} defaultValue={record?.name} /></label>
     <label>Descripción<textarea name="description" required maxLength={500} defaultValue={record?.description} /></label>
@@ -32,6 +33,10 @@ function PointForm({ record, coordinates, categories, busy, onSave, onCancel }) 
     </select></label>
     {!categories.length && <span>Crea una categoría desde Catálogos para guardar el punto.</span>}
     <label>Estado<select name="status" defaultValue={record?.status}><StateOptions /></select></label>
+    {record && <>
+      <label>Longitud<input name="longitude" type="number" step="any" min={-180} max={180} required defaultValue={coordinates[0]} /></label>
+      <label>Latitud<input name="latitude" type="number" step="any" min={-90} max={90} required defaultValue={coordinates[1]} /></label>
+    </>}
     <div className="actions"><button disabled={busy || !categories.length}>Guardar</button>
       <button type="button" className="secondary" disabled={busy} onClick={onCancel}>Cancelar</button></div>
   </form>;
@@ -69,6 +74,7 @@ export default function MapView({ api, notify }) {
   const [mode, setMode] = useState("browse");
   const [draft, setDraft] = useState(null);
   const [vertices, setVertices] = useState([]);
+  const [editingZone, setEditingZone] = useState(null);
   const [busy, setBusy] = useState(false);
   const [locationError, setLocationError] = useState("");
 
@@ -108,7 +114,11 @@ export default function MapView({ api, notify }) {
       if (resource === "locations") {
         setRevision((value) => value + 1);
       } else {
-        setZones((records) => method === "DELETE" ? records.filter((record) => record._id !== id) : [...records, result.data]);
+        setZones((records) => {
+          if (method === "POST") return [...records, result.data];
+          if (method === "PUT") return records.map((record) => record._id === id ? result.data : record);
+          return records.filter((record) => record._id !== id);
+        });
       }
       notify({ text: result.message });
       return true;
@@ -120,10 +130,11 @@ export default function MapView({ api, notify }) {
     }
   }
 
-  function selectMode(nextMode) {
+  function selectMode(nextMode, zone = null) {
     setMode(nextMode);
     setDraft(null);
-    setVertices([]);
+    setEditingZone(zone);
+    setVertices(zone ? zone.geometry.coordinates[0].slice(0, -1) : []);
   }
 
   function onMapClick(coordinates) {
@@ -136,7 +147,7 @@ export default function MapView({ api, notify }) {
     event.preventDefault();
     const name = new FormData(event.currentTarget).get("name");
     const geometry = { type: "Polygon", coordinates: [[...vertices, vertices[0]]] };
-    if (await change("zones", "POST", null, { name, geometry })) selectMode("browse");
+    if (await change("zones", editingZone ? "PUT" : "POST", editingZone?._id, { name, geometry })) selectMode("browse");
   }
 
   return <>
@@ -160,20 +171,22 @@ export default function MapView({ api, notify }) {
       </form>
       {mode !== "browse" && <div className="map-tools">
         <p>{mode === "point" ? "Haz clic en el mapa para elegir la ubicación." : "Haz clic en el mapa para marcar los vértices. Añade al menos tres."}</p>
-        {mode === "zone" && <form className="zone-form" onSubmit={saveZone}>
-          <label>Nombre de la zona<input name="name" required maxLength={100} /></label>
+        {mode === "zone" && <form key={editingZone?._id || "new"} className="zone-form" onSubmit={saveZone}>
+          <label>Nombre de la zona<input name="name" defaultValue={editingZone?.name} required maxLength={100} /></label>
           <span>{vertices.length} vértices</span>
           <button disabled={busy || vertices.length < 3}>Guardar zona</button>
           <button type="button" className="secondary" disabled={busy || !vertices.length} onClick={() => setVertices(vertices.slice(0, -1))}>Quitar último</button>
+          {editingZone && <button type="button" className="secondary" disabled={busy || !vertices.length} onClick={() => setVertices([])}>Redibujar zona</button>}
         </form>}
         <button disabled={busy} type="button" className="secondary" onClick={() => selectMode("browse")}>Cancelar</button>
       </div>}
       <MapContainer center={center} zoom={13} scrollWheelZoom={false} closePopupOnClick={false}>
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' maxZoom={19} />
         <MapClicks onClick={onMapClick} />
-        {zones.map((zone) => <Polygon key={zone._id} positions={zone.geometry.coordinates[0].map(toLatLng)}
+        {zones.filter((zone) => zone._id !== editingZone?._id).map((zone) => <Polygon key={zone._id} positions={zone.geometry.coordinates[0].map(toLatLng)}
           interactive={mode === "browse"} pathOptions={{ color: "#2c8275" }}>
           <Popup><strong>{zone.name}</strong><p>Zona de cobertura</p>
+            <button type="button" className="secondary" disabled={busy} onClick={() => selectMode("zone", zone)}>Editar zona</button>
             <button type="button" className="danger" disabled={busy} onClick={() => {
               if (window.confirm("¿Eliminar la zona " + zone.name + "?")) change("zones", "DELETE", zone._id);
             }}>Eliminar zona</button>

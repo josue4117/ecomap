@@ -23,10 +23,13 @@ Define `DEMO_EMAIL` y `DEMO_PASSWORD` en el entorno del backend y ejecuta `npm r
 | --- | --- |
 | Estado de la API | `GET /api/health` |
 | Acceso | `POST /api/auth/register` y `POST /api/auth/login` |
+| Cuenta propia | `GET`, `PUT` y `DELETE /api/auth/me` |
 | Catálogos | `/api/categories`, `/api/materials` y `/api/organizations` |
 | Mapa | `/api/locations` y `/api/zones` |
 
 Los cinco recursos autenticados permiten listar y crear con `GET` y `POST` en la colección y consultar, editar y eliminar con `GET`, `PUT` y `DELETE` en `/:id`. Envía `Authorization: Bearer <token>`. Las ubicaciones aceptan `?search=alameda&category=<id>&status=Activo`. La API devuelve geometrías GeoJSON en `geometry`. El frontend invierte el orden al pasarlas a Leaflet.
+
+En **Mi cuenta** se puede consultar el perfil, actualizar el nombre, el correo o la contraseña, y eliminar la cuenta junto con sus registros. Cambiar el perfil o eliminar la cuenta requiere la contraseña actual. En **Mapa**, el popup de una ubicación permite editar sus coordenadas y el de una zona permite renombrarla o redibujarla.
 
 En `backend/src`, `config` conecta Mongoose, `models` define los esquemas, `routes` conecta HTTP con los servicios, `services` contiene las operaciones, `middlewares` valida y maneja errores y `utils` contiene `AppError`. Ubicaciones y zonas indexan su geometría con `2dsphere`. Los registros pertenecen a un usuario mediante `owner`. La ubicación referencia una categoría mediante ObjectId y las consultas cargan su nombre con `populate`.
 

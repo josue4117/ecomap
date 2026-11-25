@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { request } from "./api";
 import MapView from "./map-view";
 import Catalogs from "./catalogs";
+import Profile from "./profile";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
@@ -56,7 +57,7 @@ function getSession() {
   }
 }
 
-function Workspace({ session, onExit }) {
+function Workspace({ session, onExit, onUpdate }) {
   const [view, setView] = useState("map");
   const [notice, setNotice] = useState(null);
 
@@ -76,13 +77,16 @@ function Workspace({ session, onExit }) {
         <nav aria-label="Principal">
           <button className={view === "map" ? "selected" : "secondary"} aria-pressed={view === "map"} onClick={() => { setView("map"); setNotice(null); }}>Mapa</button>
           <button className={view === "catalogs" ? "selected" : "secondary"} aria-pressed={view === "catalogs"} onClick={() => { setView("catalogs"); setNotice(null); }}>Catálogos</button>
+          <button className={view === "profile" ? "selected" : "secondary"} aria-pressed={view === "profile"} onClick={() => { setView("profile"); setNotice(null); }}>Mi cuenta</button>
         </nav>
         <div className="account"><span>{session.user.name}</span><button className="secondary" onClick={() => onExit()}>Cerrar sesión</button></div>
       </div>
     </header>
     <main className="workspace">
       {notice && <p className={"feedback notice " + (notice.error ? "error" : "success")} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
-      {view === "map" ? <MapView api={api} notify={setNotice} /> : <Catalogs api={api} notify={setNotice} />}
+      {view === "map" && <MapView api={api} notify={setNotice} />}
+      {view === "catalogs" && <Catalogs api={api} notify={setNotice} />}
+      {view === "profile" && <Profile api={api} notify={setNotice} onUpdate={onUpdate} onDelete={() => onExit()} />}
     </main>
   </>;
 }
@@ -96,14 +100,16 @@ function App() {
     setMessage(reason);
   }, []);
 
-  if (session) return <Workspace session={session} onExit={exit} />;
+  function saveSession(data) {
+    sessionStorage.setItem("ecomapa-session", JSON.stringify(data));
+    setSession(data);
+    setMessage("");
+  }
+
+  if (session) return <Workspace session={session} onExit={exit} onUpdate={(user) => saveSession({ ...session, user })} />;
   return <>
     {message && <p className="feedback error session-message" role="alert">{message}</p>}
-    <Access onSession={(data) => {
-      sessionStorage.setItem("ecomapa-session", JSON.stringify(data));
-      setSession(data);
-      setMessage("");
-    }} />
+    <Access onSession={saveSession} />
   </>;
 }
 

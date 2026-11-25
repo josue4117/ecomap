@@ -43,6 +43,7 @@ nav, .actions, .account { display: flex; align-items: center; flex-wrap: wrap; g
 .heading p, .muted { color: var(--muted); margin-top: .55rem; }
 .filters { display: grid; grid-template-columns: minmax(170px, 2fr) 1fr 1fr auto; align-items: end; gap: .7rem; }
 .map-panel { display: grid; gap: 1rem; }
+.profile-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; align-items: start; }
 .leaflet-container { width: 100%; height: clamp(350px, 53vh, 620px); border-radius: 9px; background: #dbe9e1; isolation: isolate; }
 .leaflet-popup-content { font-size: .875rem; }
 .leaflet-popup-content label { font-size: .875rem; }

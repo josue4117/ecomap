@@ -54,14 +54,31 @@ const schemas = {
   zone: (body) => ({ name: text(body.name, "El nombre", 100), geometry: polygon(body.geometry) }),
 };
 
-function credentials(body, register) {
+function accountEmail(body) {
   const email = text(body.email, "El correo", 254).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError("Ingresa un correo válido", 400);
-  if (typeof body.password !== "string" || Buffer.byteLength(body.password) > 72 ||
-      body.password.length < (register ? 8 : 1)) {
+  return email;
+}
+
+function validatePassword(password, register = false) {
+  if (typeof password !== "string" || Buffer.byteLength(password) > 72 ||
+      password.length < (register ? 8 : 1)) {
     throw new AppError(register ? "Usa al menos 8 caracteres y hasta 72 bytes para la contraseña" : "Contraseña inválida", 400);
   }
-  return { email, password: body.password, ...(register && { name: text(body.name, "El nombre", 100) }) };
+  return password;
+}
+
+function credentials(body, register) {
+  return { email: accountEmail(body), password: validatePassword(body.password, register),
+    ...(register && { name: text(body.name, "El nombre", 100) }) };
+}
+
+function profile(body) {
+  const email = accountEmail(body);
+  const currentPassword = validatePassword(body.currentPassword);
+  const name = text(body.name, "El nombre", 100);
+  if (body.password === undefined || body.password === "") return { name, email, currentPassword };
+  return { ...credentials({ name, email, password: body.password }, true), currentPassword };
 }
 
 function validatePayload(schema) {
@@ -88,4 +105,4 @@ function locationFilters(query) {
   return filters;
 }
 
-module.exports = { schemas, credentials, validatePayload, validateId, locationFilters };
+module.exports = { schemas, credentials, profile, validatePassword, validatePayload, validateId, locationFilters };
