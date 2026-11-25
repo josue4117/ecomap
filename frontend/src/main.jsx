@@ -30,8 +30,7 @@ function Access({ onSession }) {
   return <main className="access">
     <section className="intro">
       <span className="brand"><b>♻</b> EcoMapa</span>
-      <h1>Reciclaje, punto por punto.</h1>
-      <p>Registra centros de acopio, ubica opciones de reciclaje y delimita las zonas de cobertura en un solo mapa.</p>
+      <h1>Mapa de reciclaje</h1>
     </section>
     <section className="access-card">
       <h2>{register ? "Crear cuenta" : "Iniciar sesión"}</h2>
@@ -84,7 +83,7 @@ function Workspace({ session, onExit, onUpdate }) {
     </header>
     <main className="workspace">
       {notice && <p className={"feedback notice " + (notice.error ? "error" : "success")} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
-      {view === "map" && <MapView api={api} notify={setNotice} />}
+      {view === "map" && <MapView api={api} notice={notice} notify={setNotice} />}
       {view === "catalogs" && <Catalogs api={api} notify={setNotice} />}
       {view === "profile" && <Profile api={api} notify={setNotice} onUpdate={onUpdate} onDelete={() => onExit()} />}
     </main>

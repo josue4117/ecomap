@@ -50,7 +50,7 @@ export default function Profile({ api, notify, onUpdate, onDelete }) {
       </section>
       <section className="panel">
         <h2>Eliminar cuenta</h2>
-        <p>Se eliminarán tu cuenta y todos tus registros del mapa y los catálogos.</p>
+        <p>También se eliminarán tus registros.</p>
         <form onSubmit={(event) => submit(event, "DELETE")}>
           <label>Confirma tu contraseña<input name="password" type="password" autoComplete="current-password" required maxLength={72} /></label>
           <button className="danger" disabled={busy}>Eliminar mi cuenta</button>

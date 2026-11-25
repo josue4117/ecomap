@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 
 const catalogs = [
-  { path: "categories", title: "Categorías", description: "Clasifica las ubicaciones en el mapa." },
-  { path: "materials", title: "Materiales", description: "Mantén un inventario de materiales reciclables." },
-  { path: "organizations", title: "Organizaciones", description: "Registra a las organizaciones que participan en el reciclaje." },
+  { path: "categories", title: "Categorías" },
+  { path: "materials", title: "Materiales" },
+  { path: "organizations", title: "Organizaciones" },
 ];
 
 function Catalog({ catalog, api, notify }) {
@@ -40,10 +40,9 @@ function Catalog({ catalog, api, notify }) {
   return <div className="catalog-layout">
     <section className="panel">
       <h2>{catalog.title}</h2>
-      <p className="muted">{catalog.description}</p>
       {loadError && <p className="feedback error" role="alert">{loadError}</p>}
       {!records && !loadError && <p role="status">Cargando…</p>}
-      {records?.length === 0 && <p className="muted">Todavía no hay registros.</p>}
+      {records?.length === 0 && <p className="muted">Sin registros.</p>}
       <ul className="records">
         {records?.map((record) => <li key={record._id}>
           <div><strong>{record.name}</strong><p>{record.description}</p></div>
@@ -75,7 +74,7 @@ function Catalog({ catalog, api, notify }) {
 export default function Catalogs({ api, notify }) {
   const [active, setActive] = useState(0);
   return <>
-    <div className="heading"><h1>Catálogos de reciclaje</h1></div>
+    <div className="heading"><h1>Catálogos</h1></div>
     <nav className="tabs" aria-label="Catálogos">
       {catalogs.map((catalog, index) => <button key={catalog.path} type="button" aria-pressed={active === index} className={active === index ? "" : "secondary"} onClick={() => {
         setActive(index);
